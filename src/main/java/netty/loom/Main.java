@@ -49,7 +49,6 @@ public class Main {
                             @Override
                             protected void initChannel(SocketChannel ch) {
                                 ch.pipeline().addLast(new HttpServerCodec());
-                                ch.pipeline().addLast(new HttpObjectAggregator(65536));
                                 // Netty is going to create a new one for each connection
                                 ch.pipeline().addLast(new HttpRequestHandler(virtualThreadExecutor, RUN_ON_EVENT_LOOP));
                             }

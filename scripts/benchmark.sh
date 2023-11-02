@@ -38,7 +38,7 @@ Help()
    echo ""
    echo "j    if specified, it uses JFR profiling. async-profiler otherwise."
    echo ""
-   echo "t    number of I/O threads of the quarkus application."
+   echo "t    number of I/O threads of the server application."
    echo ""
    echo "     default is 1"
    echo ""
@@ -115,7 +115,7 @@ if [ "${JFR}" = true ]
 then
   jcmd $server_pid JFR.start duration=${PROFILING}s filename=${NOW}.jfr dumponexit=true settings=profile
 else
-  echo "----- Starting async-profiler on quarkus application ($server_pid)"
+  echo "----- Starting async-profiler on ($server_pid)"
   java -jar ap-loader-all.jar profiler -e ${EVENT} -t -d ${PROFILING} -f ${NOW}_${EVENT}.${FORMAT} $server_pid &
 fi
 

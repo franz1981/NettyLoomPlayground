@@ -2,14 +2,15 @@ package netty.loom;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.SimpleChannelInboundHandler;
+import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.handler.codec.http.*;
 import io.netty.util.CharsetUtil;
 
 import java.util.concurrent.ExecutorService;
 
-public class HttpRequestHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
+public class HttpRequestHandler extends ChannelInboundHandlerAdapter {
 
     private static final boolean USE_POOLED_DIRECT_BUFFERS = false;
     private final ExecutorService blockingThreadPool;
@@ -29,12 +30,8 @@ public class HttpRequestHandler extends SimpleChannelInboundHandler<FullHttpRequ
     }
 
     @Override
-    protected void channelRead0(ChannelHandlerContext ctx, FullHttpRequest request) {
-        // the request here doesn't require to be released, because SimpleChannelInboundHandler will do it for us
-        // BUT it cannot escape this method
-        // eg it cannot be used in the blocking thread pool, unless we retain before it escapes and release when done
-        if (request.method() != HttpMethod.GET) {
-            sendErrorResponse(ctx, HttpResponseStatus.METHOD_NOT_ALLOWED);
+    public void channelRead(ChannelHandlerContext ctx, Object msg) {
+        if (!canCallService(msg)) {
             return;
         }
         if (runOnEventLoop) {
@@ -42,6 +39,23 @@ public class HttpRequestHandler extends SimpleChannelInboundHandler<FullHttpRequ
         } else {
             blockingThreadPool.execute(this::callServiceAndFlushResponse);
         }
+    }
+
+    // Netty boilerplate stuff: we do not accept anything but non-chunked HTTP GET requests
+    private boolean canCallService(Object msg) {
+        if (msg == LastHttpContent.EMPTY_LAST_CONTENT) {
+            return false;
+        }
+        if (msg.getClass() != DefaultHttpRequest.class) {
+            sendErrorResponse(ctx, HttpResponseStatus.BAD_REQUEST, true);
+            return false;
+        }
+        final DefaultHttpRequest request = (DefaultHttpRequest) msg;
+        if (request.method() != HttpMethod.GET) {
+            sendErrorResponse(ctx, HttpResponseStatus.METHOD_NOT_ALLOWED, false);
+            return false;
+        }
+        return true;
     }
 
     private void callServiceAndFlushResponse() {
@@ -108,12 +122,16 @@ public class HttpRequestHandler extends SimpleChannelInboundHandler<FullHttpRequ
     }
 
 
-    private void sendErrorResponse(ChannelHandlerContext ctx, HttpResponseStatus status) {
+    private static void sendErrorResponse(ChannelHandlerContext ctx, HttpResponseStatus status, boolean close) {
         FullHttpResponse response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, status);
         response.headers().set(HttpHeaderNames.CONTENT_TYPE, HttpHeaderValues.TEXT_PLAIN);
 
         response.content().writeBytes(("Error: " + status).getBytes());
-        ctx.writeAndFlush(response, ctx.voidPromise());
+        if (close) {
+            ctx.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
+        } else {
+            ctx.writeAndFlush(response, ctx.voidPromise());
+        }
     }
 
     @Override
