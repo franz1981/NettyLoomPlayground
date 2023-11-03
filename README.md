@@ -16,7 +16,7 @@ To run the Netty server, follow these steps:
 1. Compile it using Maven:
 
     ```bash
-    mvn clean package
+    ./mvnw clean package
     ```
 2. Run the server:
 
@@ -25,7 +25,41 @@ To run the Netty server, follow these steps:
     java -jar -DeventLoopThreads=1 target/netty-http-jar-with-dependencies.jar
     ``` 
 3. Run the provided benchmarking script from the `scripts` folder or just `curl`:
-
+   
+    ```bash
+    cd scripts
+    ./benchmark.sh 
+    ```
     ```bash
     curl -v http://localhost:8080
     ```
+   
+The benchmarking script have a built-in help to show you the available options:
+
+```bash
+$ ./benchmark.sh -h
+Syntax: benchmark [OPTIONS]
+options:
+h    Display this guide.
+
+e    event to profile, if supported e.g. -e cpu 
+     check https://github.com/jvm-profiling-tools/async-profiler#profiler-options for the complete list
+     default is cpu
+
+f    output format, if supported by the profiler. e.g. async-profiler support html,jfr,collapsed
+     default is html
+
+d    duration of the load generation phase, in seconds
+     default is 20
+
+j    if specified, it uses JFR profiling. async-profiler otherwise.
+
+t    number of I/O threads of the server application.
+
+     default is 1
+
+c    number of connections used by the load generator.
+     default is 100
+
+p    if specified, run perf stat together with the selected profiler. Only GNU Linux.
+```
