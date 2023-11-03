@@ -14,15 +14,15 @@ import io.netty.util.ResourceLeakDetector;
 import java.net.InetSocketAddress;
 import java.util.Collections;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 public class Main {
 
     private static final boolean RUN_ON_EVENT_LOOP = false;
     private static final int LISTENING_PORT = 8080;
     private static final int EVENT_LOOP_THREADS = Integer.getInteger("eventLoopThreads", 1);
-    private static final int LOOM_SCHEDULER_PARALLELISM = 32;
+    private static final int LOOM_SCHEDULER_PARALLELISM = 1;
 
     static {
         ResourceLeakDetector.setLevel(ResourceLeakDetector.Level.DISABLED);
@@ -49,6 +49,7 @@ public class Main {
                                 ch.pipeline().addLast(new HttpRequestHandler(virtualThreadExecutor, RUN_ON_EVENT_LOOP));
                             }
                         })
+                        .childOption(ChannelOption.SO_KEEPALIVE, true)
                         .childOption(ChannelOption.TCP_NODELAY, true)
                         .childOption(ChannelOption.SO_REUSEADDR, true);
 
@@ -69,18 +70,13 @@ public class Main {
         assert !Thread.currentThread().isVirtual();
         try (ExecutorService virtualThreadExecutor = Executors.newVirtualThreadPerTaskExecutor()) {
             final AtomicInteger in = new AtomicInteger(0);
-            final AtomicBoolean allIn = new AtomicBoolean(false);
             final AtomicInteger out = new AtomicInteger(0);
             final long timeoutInNs = TimeUnit.SECONDS.toNanos(2);
             virtualThreadExecutor.invokeAll(Collections.nCopies(expectedParallelism,
                     () -> {
-                        if (in.incrementAndGet() == expectedParallelism) {
-                            allIn.set(true);
-                            out.incrementAndGet();
-                            return true;
-                        }
+                        in.incrementAndGet();
                         long start = System.nanoTime();
-                        while (!allIn.get()) {
+                        while (in.get() != expectedParallelism) {
                             if (System.nanoTime() - start > timeoutInNs) {
                                 return false;
                             }
@@ -95,7 +91,11 @@ public class Main {
                 }
             });
             if (out.get() != expectedParallelism) {
-                System.err.println("Expected " + expectedParallelism + " threads, but got just " + out.get());
+                final String fjPoolThreads = Thread.getAllStackTraces().keySet().stream()
+                        .filter(t -> t.getName().startsWith("ForkJoinPool"))
+                        .map(Thread::getName)
+                        .collect(Collectors.joining(", "));
+                System.err.println("Expected " + expectedParallelism + " threads, but got just " + out.get() + " ForkJoinPoolThreads: " + fjPoolThreads);
             }
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
