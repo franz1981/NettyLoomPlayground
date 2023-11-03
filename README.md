@@ -24,12 +24,13 @@ To run the Netty server, follow these steps:
     # by default eventLoopThreads is 1 already
     java -jar -DeventLoopThreads=1 target/netty-http-jar-with-dependencies.jar
     ``` 
-3. Run the provided benchmarking script from the `scripts` folder or just `curl`:
+3. You can opt to not run the server and run the provided benchmarking script from the `scripts` folder or run `curl` against the already running instance:
    
     ```bash
     cd scripts
     ./benchmark.sh 
     ```
+    or
     ```bash
     curl -v http://localhost:8080
     ```
